@@ -3,7 +3,7 @@ provider "aws" {
 }
 
 locals {
-  cluster_name = "cloud-enabled"
+  cluster_name = "nathan-tf"
   aws_region   = "us-gov-west-1"
 
   tags = {
@@ -12,28 +12,28 @@ locals {
   }
 }
 
-data "aws_ami" "rhel7" {
-  most_recent = true
-  owners      = ["219670896067"] # owner is specific to aws gov cloud
+# data "aws_ami" "rhel7" {
+#   most_recent = true
+#   owners      = ["287102419086"] # owner is specific to aws gov cloud
 
-  filter {
-    name   = "name"
-    values = ["RHEL-7*"]
-  }
+#   filter {
+#     name   = "name"
+#     values = ["RHEL-7*"]
+#   }
 
-  filter {
-    name   = "architecture"
-    values = ["x86_64"]
-  }
-}
+#   filter {
+#     name   = "architecture"
+#     values = ["x86_64"]
+#   }
+# }
 
 data "aws_ami" "rhel8" {
   most_recent = true
-  owners      = ["219670896067"] # owner is specific to aws gov cloud
+  owners      = ["287102419086"] # owner is specific to aws gov cloud
 
   filter {
     name   = "name"
-    values = ["RHEL-8*"]
+    values = ["rke2-rhel8*"]
   }
 
   filter {
@@ -42,35 +42,35 @@ data "aws_ami" "rhel8" {
   }
 }
 
-data "aws_ami" "centos7" {
-  most_recent = true
-  owners      = ["345084742485"] # owner is specific to aws gov cloud
+# data "aws_ami" "centos7" {
+#   most_recent = true
+#   owners      = ["287102419086"] # owner is specific to aws gov cloud
 
-  filter {
-    name   = "name"
-    values = ["CentOS Linux 7 x86_64 HVM EBS*"]
-  }
+#   filter {
+#     name   = "name"
+#     values = ["CentOS Linux 7 x86_64 HVM EBS*"]
+#   }
 
-  filter {
-    name   = "architecture"
-    values = ["x86_64"]
-  }
-}
+#   filter {
+#     name   = "architecture"
+#     values = ["x86_64"]
+#   }
+# }
 
-data "aws_ami" "centos8" {
-  most_recent = true
-  owners      = ["345084742485"] # owner is specific to aws gov cloud
+# data "aws_ami" "centos8" {
+#   most_recent = true
+#   owners      = ["287102419086"] # owner is specific to aws gov cloud
 
-  filter {
-    name   = "name"
-    values = ["CentOS Linux 8 x86_64 HVM EBS*"]
-  }
+#   filter {
+#     name   = "name"
+#     values = ["CentOS Linux 8 x86_64 HVM EBS*"]
+#   }
 
-  filter {
-    name   = "architecture"
-    values = ["x86_64"]
-  }
-}
+#   filter {
+#     name   = "architecture"
+#     values = ["x86_64"]
+#   }
+# }
 
 # Key Pair
 resource "tls_private_key" "ssh" {
@@ -97,9 +97,9 @@ module "vpc" {
   public_subnets  = ["10.88.1.0/24", "10.88.2.0/24", "10.88.3.0/24"]
   private_subnets = ["10.88.101.0/24", "10.88.102.0/24", "10.88.103.0/24"]
 
-  enable_nat_gateway   = true
-  single_nat_gateway   = true
-  enable_vpn_gateway   = true
+  enable_nat_gateway   = false
+  single_nat_gateway   = false
+  enable_vpn_gateway   = false
   enable_dns_hostnames = true
   enable_dns_support   = true
 
@@ -129,19 +129,20 @@ module "rke2" {
   vpc_id       = module.vpc.vpc_id
   subnets      = module.vpc.public_subnets # Note: Public subnets used for demo purposes, this is not recommended in production
 
-  ami                   = data.aws_ami.rhel8.image_id # Note: Multi OS is primarily for example purposes
+  ami                   = "ami-061efa908c09c5409" # Note: Multi OS is primarily for example purposes
   ssh_authorized_keys   = [tls_private_key.ssh.public_key_openssh]
   instance_type         = "t3a.medium"
   controlplane_internal = false # Note this defaults to best practice of true, but is explicitly set to public for demo purposes
   servers               = 1
 
+  associate_public_ip_address = true
   # Enable AWS Cloud Controller Manager
   enable_ccm = true
 
   rke2_config = <<-EOT
 node-label:
   - "name=server"
-  - "os=rhel8"
+  - "os=ubuntu"
 EOT
 
   tags = local.tags

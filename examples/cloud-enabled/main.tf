@@ -161,7 +161,7 @@ module "agents" {
   ami                 = data.aws_ami.rhel8.image_id # Note: Multi OS is primarily for example purposes
   ssh_authorized_keys = [tls_private_key.ssh.public_key_openssh]
   spot                = true
-  asg                 = { min : 1, max : 10, desired : 2 }
+  asg                 = { min : 1, max : 10, desired : 2, termination_policies = ["Default"] }
   instance_type       = "t3a.large"
 
   # Enable AWS Cloud Controller Manager and Cluster Autoscaler

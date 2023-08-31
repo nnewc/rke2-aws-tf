@@ -11,6 +11,7 @@ locals {
   cluster_name = "nnewc-tf"
   aws_region   = "us-gov-west-1"
 
+  rke2_version = "v1.24.16+rke2r1"
   tags = {
     "terraform" = "true",
     "env"       = "nnewc-tf",
@@ -154,8 +155,10 @@ module "rke2" {
   associate_public_ip_address = true
   # Enable AWS Cloud Controller Manager
   enable_ccm = true
-
+  
+  rke2_version = local.rke2_version
   rke2_config = <<-EOT
+secrets-encryption: true
 profile: cis-1.6
 kube-controller-manager-arg:
   - tls-min-version=VersionTLS12
@@ -182,15 +185,75 @@ EOT
 
   tags = local.tags
 
-#   extra_cloud_config_config = <<-EOT
-# users:
-# # etcd User is Required for Installing with CIS Profile Enabled
-# - name: etcd
-#   gecos: System Account for Running etcd Service
-#   sudo: false
-#   system: true
-# - name: 
-# EOT
+  extra_cloud_config_config = <<-EOT
+packages:
+- vim
+- bash-completion
+- jq
+runcmd:
+- useradd -r -c "etcd user" -s /sbin/nologin -M etcd -U
+- systemctl stop nm-cloud-setup.service
+- systemctl disable nm-cloud-setup.service
+- systemctl stop nm-cloud-setup.timer
+- systemctl disable nm-cloud-setup.timer
+- sysctl -p /etc/sysctl.d/90-kubelet.conf
+- sudo systemctl disable firewalld
+- sudo systemctl stop firewalld
+- modprobe br_netfilter
+- modprobe overlay
+  # Kernel modules required by istio-init, required for selinux enforcing instances using istio-init
+- modprobe xt_REDIRECT
+- modprobe xt_owner
+- modprobe xt_statistic
+- sysctl -w net.ipv4.ip_forward=1
+- sysctl -w net.bridge.bridge-nf-call-iptables=1
+- sysctl -w fs.inotify.max_user_instances=8192
+- sysctl -w fs.inotify.max_user_watches=524288
+- sysctl -w user.max_user_namespaces=28633
+- sysctl -p /etc/sysctl.d/90-kubelet.conf
+  # Tune vm sysctl for elasticsearch
+- sysctl -w vm.max_map_count=524288
+- mkdir -p /var/run/istio-cni && semanage fcontext -a -t container_file_t /var/run/istio-cni && restorecon -v /var/run/istio-cni
+write-files:
+# Kernel modules required by kubernetes and istio-init, required for selinux enforcing instances using istio-init
+- content: |
+    br_netfilter
+    overlay
+    xt_REDIRECT
+    xt_owner
+    xt_statistic 
+  owner: root:root
+  path: /etc/modules
+  permissions: '0644'
+# Prevent Canal Problems
+- content: |
+    [keyfile]
+    unmanaged-devices=interface-name:cali*;interface-name:flannel*
+  owner: root:root
+  path: /etc/NetworkManager/conf.d/rke2-canal.conf
+  permissions: '0644'
+# file watchers
+- content: |
+    sysctl fs.inotify.max_user_instances=8192
+    sysctl fs.inotify.max_user_watches=524288
+  owner: root:root
+  path: /etc/sysctl.d/98-rke2-fs.conf
+  permissions: '0644'
+# enable bridged traffic
+- content: |
+    net.bridge.bridge-nf-call-iptables  = 1
+    net.bridge.bridge-nf-call-ip6tables = 1
+    net.ipv4.ip_forward                 = 1
+  owner: root:root
+  path: /etc/sysctl.d/99-rke2-iptables.conf
+  permissions: '0644'
+- content: |
+    kernel.panic = 10
+    kernel.panic_on_oops = 1
+    vm.overcommit_memory = 1
+    vm.panic_on_oom = 0
+  path: /etc/sysctl.d/90-kubelet.conf
+EOT
 }
 
 #
@@ -208,17 +271,90 @@ module "agents" {
   spot                = true
   //asg                 = { min : 1, max : 10, desired : 2, termination_policies = [  ] }
   instance_type       = "t3a.xlarge"
+  associate_public_ip_address = true
 
   # Enable AWS Cloud Controller Manager and Cluster Autoscaler
   enable_ccm        = true
   enable_autoscaler = true
+  rke2_version = local.rke2_version
   rke2_config = <<-EOT
+profile: cis-1.6
 kubelet-arg:
   - protect-kernel-defaults=true
   - streaming-connection-idle-timeout=5m
+  - authorization-mode=Webhook
 node-label:
   - "name=generic"
   - "os=rhel8"
+EOT
+
+  extra_cloud_config_config = <<-EOT
+packages:
+- vim
+- bash-completion
+- jq
+runcmd:
+- useradd -r -c "etcd user" -s /sbin/nologin -M etcd -U
+- systemctl stop nm-cloud-setup.service
+- systemctl disable nm-cloud-setup.service
+- systemctl stop nm-cloud-setup.timer
+- systemctl disable nm-cloud-setup.timer
+- sudo systemctl disable firewalld
+- sudo systemctl stop firewalld
+- modprobe br_netfilter
+- modprobe overlay
+  # Kernel modules required by istio-init, required for selinux enforcing instances using istio-init
+- modprobe xt_REDIRECT
+- modprobe xt_owner
+- modprobe xt_statistic
+- sysctl -w net.ipv4.ip_forward=1
+- sysctl -w net.bridge.bridge-nf-call-iptables=1
+- sysctl -w fs.inotify.max_user_instances=8192
+- sysctl -w fs.inotify.max_user_watches=524288
+- sysctl -w user.max_user_namespaces=28633
+- sysctl -p /etc/sysctl.d/90-kubelet.conf
+  # Tune vm sysctl for elasticsearch
+- sysctl -w vm.max_map_count=524288
+- mkdir -p /var/run/istio-cni && semanage fcontext -a -t container_file_t /var/run/istio-cni && restorecon -v /var/run/istio-cni
+write-files:
+# Kernel modules required by kubernetes and istio-init, required for selinux enforcing instances using istio-init
+- content: |
+    br_netfilter
+    overlay
+    xt_REDIRECT
+    xt_owner
+    xt_statistic 
+  owner: root:root
+  path: /etc/modules
+  permissions: '0644'
+# Prevent Canal Problems
+- content: |
+    [keyfile]
+    unmanaged-devices=interface-name:cali*;interface-name:flannel*
+  owner: root:root
+  path: /etc/NetworkManager/conf.d/rke2-canal.conf
+  permissions: '0644'
+# file watchers
+- content: |
+    sysctl fs.inotify.max_user_instances=8192
+    sysctl fs.inotify.max_user_watches=524288
+  owner: root:root
+  path: /etc/sysctl.d/98-rke2-fs.conf
+  permissions: '0644'
+# enable bridged traffic
+- content: |
+    net.bridge.bridge-nf-call-iptables  = 1
+    net.bridge.bridge-nf-call-ip6tables = 1
+    net.ipv4.ip_forward                 = 1
+  owner: root:root
+  path: /etc/sysctl.d/99-rke2-iptables.conf
+  permissions: '0644'
+- content: |
+    kernel.panic = 10
+    kernel.panic_on_oops = 1
+    vm.overcommit_memory = 1
+    vm.panic_on_oom = 0
+  path: /etc/sysctl.d/90-kubelet.conf
 EOT
 
   cluster_data = module.rke2.cluster_data

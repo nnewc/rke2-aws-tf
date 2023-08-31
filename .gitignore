@@ -43,3 +43,4 @@ admin.conf
 
 **.DS_Store
 examples/test-*
+examples/cloud-enabled/myplan

@@ -140,6 +140,7 @@ module "nodepool" {
   spot                        = var.spot
   wait_for_capacity_timeout   = var.wait_for_capacity_timeout
   metadata_options            = var.metadata_options
+  associate_public_ip_address = var.associate_public_ip_address
 
   tags = merge({
     "Role" = "agent",

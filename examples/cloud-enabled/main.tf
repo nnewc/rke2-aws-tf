@@ -158,6 +158,7 @@ module "rke2" {
   
   rke2_version = local.rke2_version
   rke2_config = <<-EOT
+write-kubeconfig-mode: 644
 secrets-encryption: true
 profile: cis-1.6
 kube-controller-manager-arg:
@@ -186,6 +187,7 @@ EOT
   tags = local.tags
 
   extra_cloud_config_config = <<-EOT
+package_update: true
 packages:
 - vim
 - bash-completion
@@ -214,7 +216,7 @@ runcmd:
   # Tune vm sysctl for elasticsearch
 - sysctl -w vm.max_map_count=524288
 - mkdir -p /var/run/istio-cni && semanage fcontext -a -t container_file_t /var/run/istio-cni && restorecon -v /var/run/istio-cni
-write-files:
+write_files:
 # Kernel modules required by kubernetes and istio-init, required for selinux enforcing instances using istio-init
 - content: |
     br_netfilter
@@ -289,6 +291,7 @@ node-label:
 EOT
 
   extra_cloud_config_config = <<-EOT
+package_update: true
 packages:
 - vim
 - bash-completion
@@ -316,7 +319,7 @@ runcmd:
   # Tune vm sysctl for elasticsearch
 - sysctl -w vm.max_map_count=524288
 - mkdir -p /var/run/istio-cni && semanage fcontext -a -t container_file_t /var/run/istio-cni && restorecon -v /var/run/istio-cni
-write-files:
+write_files:
 # Kernel modules required by kubernetes and istio-init, required for selinux enforcing instances using istio-init
 - content: |
     br_netfilter
